@@ -65,18 +65,19 @@ export default function Home() {
   const parseInputData = () => {
     try {
       const data = inputData.trim().split(/\s+/);
-      if (data.length % 3 !== 0) {
+      if (data.length % 2 !== 0) {
         alert(
-          "Dữ liệu nhập không hợp lệ! Phải theo định dạng: tên thời_điểm_xuất_hiện thời_gian_CPU (lặp lại cho mỗi tiến trình)"
+          "Dữ liệu nhập không hợp lệ! Phải theo định dạng: thời_điểm_xuất_hiện thời_gian_CPU (lặp lại cho mỗi tiến trình)"
         );
         return;
       }
 
       const newProcesses: Process[] = [];
-      for (let i = 0; i < data.length; i += 3) {
-        const name = data[i];
-        const arrivalTime = parseInt(data[i + 1]);
-        const burstTime = parseInt(data[i + 2]);
+      for (let i = 0; i < data.length; i += 2) {
+        const arrivalTime = parseInt(data[i]);
+        const burstTime = parseInt(data[i + 1]);
+        const processNumber = i / 2 + 1;
+        const name = `P${processNumber}`;
 
         if (isNaN(arrivalTime) || isNaN(burstTime)) {
           alert(
@@ -424,24 +425,25 @@ export default function Home() {
             <div className="space-y-4">
               <div>
                 <Label htmlFor="inputData">
-                  Nhập dữ liệu tiến trình (định dạng: tên thời_điểm_xuất_hiện
+                  Nhập dữ liệu tiến trình (định dạng: thời_điểm_xuất_hiện
                   thời_gian_CPU)
                 </Label>
                 <Input
                   id="inputData"
-                  placeholder="Ví dụ: P1 0 10 P2 1 2 P3 2 5"
+                  placeholder="Ví dụ: 0 10 1 2 2 5"
                   value={inputData}
                   onChange={(e) => setInputData(e.target.value)}
                   className="text-sm"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Định dạng: tên_tiến_trình thời_điểm_xuất_hiện thời_gian_CPU
-                  (cách nhau bằng dấu cách)
+                  Định dạng: thời_điểm_xuất_hiện thời_gian_CPU (cách nhau bằng
+                  dấu cách)
                 </p>
                 <p className="text-xs text-blue-600 mt-1">
-                  Ví dụ: &quot;P1 0 10 P2 1 2 P3 2 5&quot; nghĩa là P1 xuất hiện
-                  lúc 0, dùng CPU 10 đơn vị; P2 xuất hiện lúc 1, dùng CPU 2 đơn
-                  vị; P3 xuất hiện lúc 2, dùng CPU 5 đơn vị
+                  Ví dụ: &quot;0 10 1 2 2 5&quot; sẽ tạo P1 (xuất hiện lúc 0,
+                  dùng CPU 10 đơn vị), P2 (xuất hiện lúc 1, dùng CPU 2 đơn vị),
+                  P3 (xuất hiện lúc 2, dùng CPU 5 đơn vị). Tên tiến trình sẽ tự
+                  động là P1, P2, P3...
                 </p>
               </div>
               <div className="flex gap-2">
