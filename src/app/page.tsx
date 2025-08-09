@@ -606,6 +606,77 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
+
+                {/* Timeline Legend */}
+                <div className="mt-6 pt-4 border-t border-gray-200">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-3">
+                    Chú thích biểu đồ Gantt:
+                  </h4>
+                  <div className="space-y-2">
+                    {Array.from(
+                      {
+                        length:
+                          Math.max(...ganttChart.map((item) => item.endTime)) +
+                          1,
+                      },
+                      (_, time) => {
+                        const eventsAtTime: string[] = [];
+
+                        // Check for process arrivals
+                        processes.forEach((process) => {
+                          if (process.arrivalTime === time) {
+                            eventsAtTime.push(`${process.name} vào RQ`);
+                          }
+                        });
+
+                        // Check for process starts and ends
+                        ganttChart.forEach((segment) => {
+                          if (segment.startTime === time && time > 0) {
+                            eventsAtTime.push(
+                              `${segment.processName} dùng CPU`
+                            );
+                          }
+                          if (segment.endTime === time) {
+                            // Check if process is completed
+                            const processResult = results.find(
+                              (r) => r.process.name === segment.processName
+                            );
+                            if (
+                              processResult &&
+                              processResult.endTime === time
+                            ) {
+                              eventsAtTime.push(
+                                `${segment.processName} kết thúc`
+                              );
+                            }
+                          }
+                        });
+
+                        if (eventsAtTime.length > 0) {
+                          return (
+                            <div
+                              key={time}
+                              className="flex items-start gap-2 text-xs"
+                            >
+                              <span className="font-semibold text-blue-600 min-w-[20px]">
+                                {time}:
+                              </span>
+                              <div className="flex flex-wrap gap-1">
+                                {eventsAtTime.map((event, index) => (
+                                  <span key={index} className="text-gray-700">
+                                    {event}
+                                    {index < eventsAtTime.length - 1 ? "," : ""}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }
+                    ).filter(Boolean)}
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
