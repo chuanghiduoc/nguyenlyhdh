@@ -1,103 +1,722 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Trash2, Plus, Play } from "lucide-react";
+
+interface Process {
+  id: string;
+  name: string;
+  arrivalTime: number;
+  burstTime: number;
+}
+
+interface SchedulingResult {
+  process: Process;
+  startTime: number;
+  endTime: number;
+  turnaroundTime: number;
+  waitingTime: number;
+}
+
+interface GanttItem {
+  processName: string;
+  startTime: number;
+  endTime: number;
+  color: string;
+}
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [processes, setProcesses] = useState<Process[]>([]);
+  const [inputData, setInputData] = useState<string>("");
+  const [algorithm, setAlgorithm] = useState<string>("fcfs");
+  const [timeQuantum, setTimeQuantum] = useState<string>("2");
+  const [results, setResults] = useState<SchedulingResult[]>([]);
+  const [ganttChart, setGanttChart] = useState<GanttItem[]>([]);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  const colors = [
+    "#FF6B6B",
+    "#4ECDC4",
+    "#45B7D1",
+    "#96CEB4",
+    "#FFEAA7",
+    "#DDA0DD",
+    "#98D8C8",
+    "#F7DC6F",
+    "#BB8FCE",
+    "#85C1E9",
+    "#F8C471",
+    "#82E0AA",
+  ];
+
+  const parseInputData = () => {
+    try {
+      const data = inputData.trim().split(/\s+/);
+      if (data.length % 3 !== 0) {
+        alert(
+          "Dữ liệu nhập không hợp lệ! Phải theo định dạng: tên thời_điểm_xuất_hiện thời_gian_CPU (lặp lại cho mỗi tiến trình)"
+        );
+        return;
+      }
+
+      const newProcesses: Process[] = [];
+      for (let i = 0; i < data.length; i += 3) {
+        const name = data[i];
+        const arrivalTime = parseInt(data[i + 1]);
+        const burstTime = parseInt(data[i + 2]);
+
+        if (isNaN(arrivalTime) || isNaN(burstTime)) {
+          alert(
+            `Dữ liệu không hợp lệ cho tiến trình ${name}. Thời điểm xuất hiện và thời gian CPU phải là số.`
+          );
+          return;
+        }
+
+        newProcesses.push({
+          id: `${Date.now()}-${i}`,
+          name,
+          arrivalTime,
+          burstTime,
+        });
+      }
+
+      setProcesses(newProcesses);
+      setResults([]);
+      setGanttChart([]);
+    } catch (error) {
+      alert("Có lỗi khi phân tích dữ liệu nhập!");
+    }
+  };
+
+  const removeProcess = (id: string) => {
+    setProcesses(processes.filter((p) => p.id !== id));
+  };
+
+  const fcfsScheduling = (
+    processes: Process[]
+  ): { results: SchedulingResult[]; gantt: GanttItem[] } => {
+    const sortedProcesses = [...processes].sort(
+      (a, b) => a.arrivalTime - b.arrivalTime
+    );
+    const results: SchedulingResult[] = [];
+    const gantt: GanttItem[] = [];
+    let currentTime = 0;
+
+    sortedProcesses.forEach((process, index) => {
+      const startTime = Math.max(currentTime, process.arrivalTime);
+      const endTime = startTime + process.burstTime;
+      const turnaroundTime = endTime - process.arrivalTime;
+      const waitingTime = turnaroundTime - process.burstTime;
+
+      results.push({
+        process,
+        startTime,
+        endTime,
+        turnaroundTime,
+        waitingTime,
+      });
+
+      gantt.push({
+        processName: process.name,
+        startTime,
+        endTime,
+        color: colors[index % colors.length],
+      });
+
+      currentTime = endTime;
+    });
+
+    return { results, gantt };
+  };
+
+  const sjfScheduling = (
+    processes: Process[]
+  ): { results: SchedulingResult[]; gantt: GanttItem[] } => {
+    const results: SchedulingResult[] = [];
+    const gantt: GanttItem[] = [];
+    let currentTime = 0;
+    let remainingProcesses = [...processes];
+    let colorIndex = 0;
+
+    while (remainingProcesses.length > 0) {
+      const availableProcesses = remainingProcesses.filter(
+        (p) => p.arrivalTime <= currentTime
+      );
+
+      if (availableProcesses.length === 0) {
+        currentTime = Math.min(...remainingProcesses.map((p) => p.arrivalTime));
+        continue;
+      }
+
+      const shortestProcess = availableProcesses.reduce((shortest, current) =>
+        current.burstTime < shortest.burstTime ? current : shortest
+      );
+
+      const startTime = currentTime;
+      const endTime = startTime + shortestProcess.burstTime;
+      const turnaroundTime = endTime - shortestProcess.arrivalTime;
+      const waitingTime = turnaroundTime - shortestProcess.burstTime;
+
+      results.push({
+        process: shortestProcess,
+        startTime,
+        endTime,
+        turnaroundTime,
+        waitingTime,
+      });
+
+      gantt.push({
+        processName: shortestProcess.name,
+        startTime,
+        endTime,
+        color: colors[colorIndex % colors.length],
+      });
+
+      currentTime = endTime;
+      remainingProcesses = remainingProcesses.filter(
+        (p) => p.id !== shortestProcess.id
+      );
+      colorIndex++;
+    }
+
+    return { results, gantt };
+  };
+
+  const roundRobinScheduling = (
+    processes: Process[],
+    quantum: number
+  ): { results: SchedulingResult[]; gantt: GanttItem[] } => {
+    const results: SchedulingResult[] = [];
+    const gantt: GanttItem[] = [];
+    let currentTime = 0;
+
+    const processQueue = [...processes].sort(
+      (a, b) => a.arrivalTime - b.arrivalTime
+    );
+    const remainingTime = new Map(processes.map((p) => [p.id, p.burstTime]));
+    const completionTime = new Map<string, number>();
+    const processColors = new Map(
+      processes.map((p, i) => [p.id, colors[i % colors.length]])
+    );
+
+    const queue: Process[] = [];
+    let processIndex = 0;
+
+    while (queue.length > 0 || processIndex < processQueue.length) {
+      // Add newly arrived processes to queue
+      while (
+        processIndex < processQueue.length &&
+        processQueue[processIndex].arrivalTime <= currentTime
+      ) {
+        queue.push(processQueue[processIndex]);
+        processIndex++;
+      }
+
+      if (queue.length === 0) {
+        currentTime = processQueue[processIndex].arrivalTime;
+        continue;
+      }
+
+      const currentProcess = queue.shift()!;
+      const remainingBurst = remainingTime.get(currentProcess.id)!;
+      const executionTime = Math.min(quantum, remainingBurst);
+
+      gantt.push({
+        processName: currentProcess.name,
+        startTime: currentTime,
+        endTime: currentTime + executionTime,
+        color: processColors.get(currentProcess.id)!,
+      });
+
+      currentTime += executionTime;
+      remainingTime.set(currentProcess.id, remainingBurst - executionTime);
+
+      // Add newly arrived processes
+      while (
+        processIndex < processQueue.length &&
+        processQueue[processIndex].arrivalTime <= currentTime
+      ) {
+        queue.push(processQueue[processIndex]);
+        processIndex++;
+      }
+
+      if (remainingTime.get(currentProcess.id)! > 0) {
+        queue.push(currentProcess);
+      } else {
+        completionTime.set(currentProcess.id, currentTime);
+      }
+    }
+
+    // Calculate results
+    processes.forEach((process) => {
+      const endTime = completionTime.get(process.id)!;
+      const turnaroundTime = endTime - process.arrivalTime;
+      const waitingTime = turnaroundTime - process.burstTime;
+
+      results.push({
+        process,
+        startTime: process.arrivalTime,
+        endTime,
+        turnaroundTime,
+        waitingTime,
+      });
+    });
+
+    return { results, gantt };
+  };
+
+  const srtnScheduling = (
+    processes: Process[]
+  ): { results: SchedulingResult[]; gantt: GanttItem[] } => {
+    const results: SchedulingResult[] = [];
+    const gantt: GanttItem[] = [];
+    let currentTime = 0;
+
+    const remainingTime = new Map(processes.map((p) => [p.id, p.burstTime]));
+    const completionTime = new Map<string, number>();
+    const processColors = new Map(
+      processes.map((p, i) => [p.id, colors[i % colors.length]])
+    );
+
+    let lastProcess: Process | null = null;
+    let segmentStart = 0;
+
+    while (completionTime.size < processes.length) {
+      const availableProcesses = processes.filter(
+        (p) => p.arrivalTime <= currentTime && remainingTime.get(p.id)! > 0
+      );
+
+      if (availableProcesses.length === 0) {
+        currentTime++;
+        continue;
+      }
+
+      const shortestProcess = availableProcesses.reduce((shortest, current) =>
+        remainingTime.get(current.id)! < remainingTime.get(shortest.id)!
+          ? current
+          : shortest
+      );
+
+      if (lastProcess && lastProcess.id !== shortestProcess.id) {
+        gantt.push({
+          processName: lastProcess.name,
+          startTime: segmentStart,
+          endTime: currentTime,
+          color: processColors.get(lastProcess.id)!,
+        });
+        segmentStart = currentTime;
+      } else if (!lastProcess) {
+        segmentStart = currentTime;
+      }
+
+      remainingTime.set(
+        shortestProcess.id,
+        remainingTime.get(shortestProcess.id)! - 1
+      );
+      currentTime++;
+
+      if (remainingTime.get(shortestProcess.id)! === 0) {
+        completionTime.set(shortestProcess.id, currentTime);
+        gantt.push({
+          processName: shortestProcess.name,
+          startTime: segmentStart,
+          endTime: currentTime,
+          color: processColors.get(shortestProcess.id)!,
+        });
+        lastProcess = null;
+      } else {
+        lastProcess = shortestProcess;
+      }
+    }
+
+    // Calculate results
+    processes.forEach((process) => {
+      const endTime = completionTime.get(process.id)!;
+      const turnaroundTime = endTime - process.arrivalTime;
+      const waitingTime = turnaroundTime - process.burstTime;
+
+      results.push({
+        process,
+        startTime: process.arrivalTime,
+        endTime,
+        turnaroundTime,
+        waitingTime,
+      });
+    });
+
+    return { results, gantt };
+  };
+
+  const runScheduling = () => {
+    if (processes.length === 0) return;
+
+    let schedulingResult;
+
+    switch (algorithm) {
+      case "fcfs":
+        schedulingResult = fcfsScheduling(processes);
+        break;
+      case "sjf":
+        schedulingResult = sjfScheduling(processes);
+        break;
+      case "rr":
+        schedulingResult = roundRobinScheduling(
+          processes,
+          parseInt(timeQuantum)
+        );
+        break;
+      case "srtn":
+        schedulingResult = srtnScheduling(processes);
+        break;
+      default:
+        schedulingResult = fcfsScheduling(processes);
+    }
+
+    setResults(schedulingResult.results);
+    setGanttChart(schedulingResult.gantt);
+  };
+
+  const averageWaitingTime =
+    results.length > 0
+      ? (
+          results.reduce((sum, r) => sum + r.waitingTime, 0) / results.length
+        ).toFixed(2)
+      : "0";
+
+  const averageTurnaroundTime =
+    results.length > 0
+      ? (
+          results.reduce((sum, r) => sum + r.turnaroundTime, 0) / results.length
+        ).toFixed(2)
+      : "0";
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">
+            Mô phỏng thuật toán điều độ CPU
+          </h1>
+          <p className="text-gray-600">
+            FCFS, Round Robin, SJF, SRTN với biểu đồ Gantt và phân tích kết quả
+          </p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+        {/* Process Input */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Nhập thông tin tiến trình</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="inputData">
+                  Nhập dữ liệu tiến trình (định dạng: tên thời_điểm_xuất_hiện
+                  thời_gian_CPU)
+                </Label>
+                <Input
+                  id="inputData"
+                  placeholder="Ví dụ: P1 0 10 P2 1 2 P3 2 5"
+                  value={inputData}
+                  onChange={(e) => setInputData(e.target.value)}
+                  className="text-sm"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Định dạng: tên_tiến_trình thời_điểm_xuất_hiện thời_gian_CPU
+                  (cách nhau bằng dấu cách)
+                </p>
+                <p className="text-xs text-blue-600 mt-1">
+                  Ví dụ: &quot;P1 0 10 P2 1 2 P3 2 5&quot; nghĩa là P1 xuất hiện
+                  lúc 0, dùng CPU 10 đơn vị; P2 xuất hiện lúc 1, dùng CPU 2 đơn
+                  vị; P3 xuất hiện lúc 2, dùng CPU 5 đơn vị
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={parseInputData} className="flex-1">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Phân tích dữ liệu
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setProcesses([]);
+                    setInputData("");
+                    setResults([]);
+                    setGanttChart([]);
+                  }}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Xóa tất cả
+                </Button>
+              </div>
+            </div>
+
+            {processes.length > 0 && (
+              <div>
+                <h3 className="font-semibold mb-2">Danh sách tiến trình:</h3>
+                <div className="flex flex-wrap gap-2">
+                  {processes.map((process) => (
+                    <Badge
+                      key={process.id}
+                      variant="secondary"
+                      className="px-3 py-1"
+                    >
+                      {process.name} (AT: {process.arrivalTime}, BT:{" "}
+                      {process.burstTime})
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="ml-2 h-4 w-4 p-0"
+                        onClick={() => removeProcess(process.id)}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Algorithm Selection */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Chọn thuật toán điều độ</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <RadioGroup value={algorithm} onValueChange={setAlgorithm}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="fcfs" id="fcfs" />
+                  <Label htmlFor="fcfs" className="font-medium">
+                    FCFS (First Come First Served)
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="sjf" id="sjf" />
+                  <Label htmlFor="sjf" className="font-medium">
+                    SJF (Shortest Job First)
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="rr" id="rr" />
+                  <Label htmlFor="rr" className="font-medium">
+                    RR (Round Robin)
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="srtn" id="srtn" />
+                  <Label htmlFor="srtn" className="font-medium">
+                    SRTN (Shortest Remaining Time Next)
+                  </Label>
+                </div>
+              </div>
+            </RadioGroup>
+
+            {algorithm === "rr" && (
+              <div className="w-48">
+                <Label htmlFor="timeQuantum">Time Quantum</Label>
+                <Input
+                  id="timeQuantum"
+                  type="number"
+                  value={timeQuantum}
+                  onChange={(e) => setTimeQuantum(e.target.value)}
+                />
+              </div>
+            )}
+
+            <Button
+              onClick={runScheduling}
+              disabled={processes.length === 0}
+              className="w-full"
+            >
+              <Play className="w-4 h-4 mr-2" />
+              Chạy thuật toán điều độ
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Gantt Chart */}
+        {ganttChart.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Biểu đồ Gantt</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex items-center overflow-x-auto pb-4">
+                  {ganttChart.map((item, index) => (
+                    <div
+                      key={index}
+                      className="flex-shrink-0 border-2 border-gray-400 text-center text-sm font-medium relative"
+                      style={{
+                        backgroundColor: item.color,
+                        width: `${(item.endTime - item.startTime) * 50}px`,
+                        minWidth: "80px",
+                        height: "80px",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <div className="text-white font-bold drop-shadow-md text-lg">
+                        {item.processName}
+                      </div>
+                      <div className="text-white font-semibold drop-shadow-md text-xs mt-1">
+                        {item.startTime} - {item.endTime}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center overflow-x-auto">
+                  {ganttChart.map((item, index) => (
+                    <div
+                      key={index}
+                      className="flex-shrink-0 text-center relative border-r border-gray-300"
+                      style={{
+                        width: `${(item.endTime - item.startTime) * 50}px`,
+                        minWidth: "80px",
+                      }}
+                    >
+                      <div className="absolute left-0 -top-2 text-gray-700 font-semibold text-sm bg-white px-1 rounded">
+                        {item.startTime}
+                      </div>
+                      {index === ganttChart.length - 1 && (
+                        <div className="absolute right-0 -top-2 text-gray-700 font-semibold text-sm bg-white px-1 rounded">
+                          {item.endTime}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Results Table */}
+        {results.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Kết quả phân tích</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Tiến trình</TableHead>
+                      <TableHead>Thời điểm xuất hiện</TableHead>
+                      <TableHead>Thời gian sử dụng CPU</TableHead>
+                      <TableHead>Thời gian lưu lại hệ thống</TableHead>
+                      <TableHead>Thời gian chờ</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {results.map((result, index) => (
+                      <TableRow key={index}>
+                        <TableCell className="font-medium">
+                          {result.process.name}
+                        </TableCell>
+                        <TableCell>{result.process.arrivalTime}</TableCell>
+                        <TableCell>{result.process.burstTime}</TableCell>
+                        <TableCell>{result.turnaroundTime}</TableCell>
+                        <TableCell>{result.waitingTime}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                  <div className="p-4 bg-blue-50 rounded-lg">
+                    <h3 className="font-semibold text-blue-900">
+                      Thời gian chờ trung bình
+                    </h3>
+                    <p className="text-2xl font-bold text-blue-700">
+                      {averageWaitingTime}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-green-50 rounded-lg">
+                    <h3 className="font-semibold text-green-900">
+                      Thời gian lưu lại hệ thống trung bình
+                    </h3>
+                    <p className="text-2xl font-bold text-green-700">
+                      {averageTurnaroundTime}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Explanations */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Giải thích các thuật ngữ</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <h4 className="font-semibold text-blue-700">
+                Thời gian lưu lại hệ thống (Turnaround Time):
+              </h4>
+              <p className="text-sm text-gray-600">
+                = Thời điểm tiến trình kết thúc sử dụng CPU - Thời điểm xuất
+                hiện
+              </p>
+            </div>
+            <div>
+              <h4 className="font-semibold text-green-700">
+                Thời gian chờ (Waiting Time):
+              </h4>
+              <p className="text-sm text-gray-600">
+                = Thời gian lưu lại hệ thống - Thời gian sử dụng CPU
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <div>
+                <h4 className="font-semibold text-purple-700">FCFS:</h4>
+                <p className="text-sm text-gray-600">
+                  Tiến trình đến trước được phục vụ trước
+                </p>
+              </div>
+              <div>
+                <h4 className="font-semibold text-purple-700">SJF:</h4>
+                <p className="text-sm text-gray-600">
+                  Tiến trình có thời gian thực thi ngắn nhất được ưu tiên
+                </p>
+              </div>
+              <div>
+                <h4 className="font-semibold text-purple-700">Round Robin:</h4>
+                <p className="text-sm text-gray-600">
+                  Mỗi tiến trình được cấp phát CPU theo time quantum
+                </p>
+              </div>
+              <div>
+                <h4 className="font-semibold text-purple-700">SRTN:</h4>
+                <p className="text-sm text-gray-600">
+                  Tiến trình có thời gian còn lại ngắn nhất được ưu tiên
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
